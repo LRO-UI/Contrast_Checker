@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Contrast checker</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='7' y='7' width='18' height='18' transform='rotate(45 16 16)' fill='%233f6fa8' stroke='%23e7eaf0' stroke-width='1.5'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&family=IBM+Plex+Mono:wght@400;500&family=Playfair+Display:wght@400..900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    box-sizing:border-box;
+    padding-top:env(safe-area-inset-top,0px);
+    padding-bottom:env(safe-area-inset-bottom,0px);
+    color-scheme:dark;
+    --bg:#0d0f14; --panel:#14171f; --panel-edge:#232732;
+    --blue:#3f6fa8; --blue2:#5c7f9e; --steel:#7c8698;
+    --ink:#e7eaf0; --ink-soft:#727c8c; --line:#252a35;
+    --ok:#7fa88a; --danger:#c77a7a;
+    --font-ui:'Space Grotesk', system-ui, sans-serif;
+    --font-display:'Playfair Display', Georgia, serif;
+    --font-mono:'IBM Plex Mono', ui-monospace, Menlo, monospace;
+  }
+  html{ scroll-padding-top:env(safe-area-inset-top,0px); height:100%; }
+  *{ box-sizing:border-box; }
+  body{
+    margin:0; min-height:100%; background:var(--bg); color:var(--ink);
+    font-family:var(--font-ui); display:flex; flex-direction:column;
+  }
+  header{
+    padding:22px 30px; border-bottom:4px double var(--blue2);
+    display:flex; align-items:baseline; gap:16px; flex-wrap:wrap;
+  }
+  header h1{ margin:0; font-family:var(--font-display); font-weight:800; font-size:1.5rem; letter-spacing:.02em; }
+  header p{ margin:0; font-size:.78rem; color:var(--ink-soft); }
+  .app{ display:flex; flex:1; flex-wrap:wrap; }
+
+  /* Stage */
+  .stage{
+    flex:3 1 560px; min-width:0; padding:40px; display:flex; align-items:stretch;
+    border-right:1px solid var(--line);
+  }
+  .rail-frame{ position:relative; flex:1; display:flex; min-height:480px; min-width:0; }
+  .rail-frame::before, .rail-frame::after{ content:''; position:absolute; pointer-events:none; z-index:2; }
+  .rail-frame::before{ inset:8px; border:1px solid rgba(231,234,240,.6); }
+  .rail-frame::after{ inset:13px; border:1px solid rgba(92,127,158,.35); }
+  .rail-d{
+    position:absolute; width:10px; height:10px; z-index:3;
+    background:var(--blue); border:2px solid var(--bg);
+    transform:translate(-50%,-50%) rotate(45deg);
+    box-shadow:0 0 0 1px rgba(231,234,240,.5);
+  }
+  .rail-d.tl{top:8px; left:8px;} .rail-d.tr{top:8px; left:calc(100% - 8px);}
+  .rail-d.bl{top:calc(100% - 8px); left:8px;} .rail-d.br{top:calc(100% - 8px); left:calc(100% - 8px);}
+
+  .preview{
+    flex:1; margin:34px; display:flex; flex-direction:column; gap:26px;
+    min-width:0; position:relative; z-index:4;
+  }
+
+  /* Specimen */
+  .specimen{ display:flex; flex-direction:column; gap:10px; min-width:0; }
+  .specimen + .specimen{ padding-top:26px; border-top:4px double var(--blue2); }
+  .specimen.fresh .surface{ animation:reveal .45s ease-out; }
+  @keyframes reveal{ from{ opacity:.25; } to{ opacity:1; } }
+  @media (prefers-reduced-motion:reduce){ .specimen.fresh .surface{ animation:none; } }
+
+  .spec-meta{
+    display:flex; justify-content:space-between; align-items:baseline; gap:12px; flex-wrap:wrap;
+    font-size:.72rem; letter-spacing:.06em; font-variant-numeric:tabular-nums;
+  }
+  .spec-name{ color:var(--blue2); }
+  .spec-pair{ font-family:var(--font-mono); color:var(--ink-soft); font-size:.7rem; }
+  .spec-verdict{ font-family:var(--font-mono); font-size:.72rem; }
+  .spec-verdict.pass{ color:var(--ok); }
+  .spec-verdict.fail{ color:var(--danger); }
+
+  .plate{
+    background:var(--panel); border:1px solid var(--line); padding:6px;
+    box-shadow:inset 0 0 0 3px var(--panel), inset 0 0 0 4px var(--panel-edge);
+  }
+  .surface{
+    padding:28px 28px 30px; display:grid; gap:22px; min-width:0;
+    transition:background-color .2s, color .2s;
+  }
+  @media (prefers-reduced-motion:reduce){ .surface{ transition:none; } }
+
+  .ladder{ display:grid; gap:12px; min-width:0; }
+  .rung{ display:grid; grid-template-columns:72px 1fr; gap:14px; align-items:baseline; min-width:0; }
+  .rung .sz{ font-family:var(--font-mono); font-size:11px; line-height:1.3; }
+  .rung .sz small{ display:block; font-size:10px; opacity:1; }
+  .rung .tx{ min-width:0; overflow-wrap:anywhere; }
+  .t32{ font-family:var(--font-display); font-weight:700; font-size:32px; line-height:1.15; }
+  .t24{ font-size:24px; font-weight:500; line-height:1.25; }
+  .t19{ font-size:18.66px; font-weight:700; line-height:1.3; }
+  .t16{ font-size:16px; line-height:1.55; max-width:62ch; }
+  .t14{ font-size:14px; line-height:1.5; max-width:62ch; }
+  .t12{ font-size:12px; line-height:1.45; }
+
+  .kit{ display:flex; flex-wrap:wrap; gap:22px 34px; align-items:center; padding-top:18px; border-top:1px solid currentColor; }
+  .icons{ display:flex; align-items:flex-end; gap:16px; flex-wrap:wrap; }
+  .icons svg{ fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; flex:none; }
+  .icons .solid{ fill:currentColor; stroke:none; }
+  .ui{ display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
+  .fake-btn{ font:500 14px var(--font-ui); padding:9px 16px; border:1px solid currentColor; }
+  .fake-btn.fill{ background:var(--sfg); color:var(--sbg); border-color:var(--sfg); }
+  .fake-input{ font:14px var(--font-ui); padding:8px 12px; border:1px solid currentColor; min-width:150px; }
+  .fake-check{ display:inline-flex; align-items:center; gap:8px; font-size:14px; }
+  .fake-check i{ width:16px; height:16px; border:1.5px solid currentColor; display:grid; place-items:center; }
+  .fake-check i svg{ width:12px; height:12px; fill:none; stroke:currentColor; stroke-width:2; }
+  .fake-link{ font-size:14px; text-decoration:underline; text-underline-offset:3px; }
+
+  /* Side panel */
+  .side{
+    flex:1 1 320px; min-width:0; padding:30px 28px;
+    display:flex; flex-direction:column; gap:28px; overflow:auto;
+  }
+  .group-title{
+    display:flex; align-items:center; gap:10px;
+    text-transform:uppercase; letter-spacing:.26em; font-size:.66rem;
+    color:var(--ink-soft); margin-bottom:12px;
+  }
+  .group-title::before{ content:''; width:6px; height:6px; background:var(--blue); transform:rotate(45deg); flex:none; }
+  .group-title::after{ content:''; flex:1; height:3px; border-top:1px solid var(--blue); border-bottom:1px solid var(--blue2); }
+  .hint{ font-size:.72rem; color:var(--ink-soft); line-height:1.5; margin-top:10px; }
+  [hidden]{ display:none !important; }
+
+  /* Ratio readout */
+  .ratios{ display:grid; grid-template-columns:1fr; gap:8px; }
+  .ratios.two{ grid-template-columns:1fr 1fr; }
+  .ratio{
+    border:1px solid var(--line); padding:14px 14px 12px; min-width:0;
+    box-shadow:inset 0 0 0 3px var(--bg), inset 0 0 0 4px var(--panel-edge);
+  }
+  .ratio span{ display:block; font-size:.62rem; color:var(--ink-soft); letter-spacing:.06em; }
+  .ratio b{
+    display:block; font-family:var(--font-display); font-weight:700; font-size:2.6rem; line-height:1.05;
+    font-variant-numeric:tabular-nums; margin-top:4px;
+  }
+  .ratio b small{ font-size:.45em; font-weight:400; color:var(--ink-soft); margin-left:2px; }
+  .ratios.two .ratio b{ font-size:2rem; }
+  .delta{ font-size:.72rem; color:var(--ink-soft); margin-top:10px; min-height:1.1em; font-variant-numeric:tabular-nums; }
+
+  .checks{ margin-top:14px; border-top:1px solid var(--line); }
+  .check-row{
+    display:grid; grid-template-columns:1fr auto; gap:10px; align-items:center;
+    padding:9px 0; border-bottom:1px solid var(--line); font-size:.76rem;
+  }
+  .checks.two .check-row{ grid-template-columns:1fr 58px 58px; }
+  .check-row .need{ display:block; font-family:var(--font-mono); font-size:.66rem; color:var(--ink-soft); margin-top:2px; }
+  .check-head{ font-size:.62rem; color:var(--ink-soft); letter-spacing:.06em; padding:8px 0 6px; }
+  .mark{ font-family:var(--font-mono); font-size:.7rem; display:inline-flex; align-items:center; gap:6px; justify-self:start; min-width:52px; }
+  .mark::before{ content:''; width:6px; height:6px; transform:rotate(45deg); flex:none; }
+  .mark.pass{ color:var(--ok); } .mark.pass::before{ background:var(--ok); }
+  .mark.fail{ color:var(--danger); } .mark.fail::before{ border:1px solid var(--danger); }
+
+  /* Color fields */
+  .fields{ display:grid; gap:12px; }
+  .field label{ display:block; font-size:.7rem; color:var(--ink-soft); margin-bottom:6px; letter-spacing:.04em; }
+  .field-row{ display:grid; grid-template-columns:48px 1fr; gap:8px; }
+  input[type=color]{
+    -webkit-appearance:none; appearance:none; width:48px; height:46px; padding:5px; margin:0;
+    background:var(--panel); border:1px solid var(--line); border-radius:0; cursor:pointer;
+    box-shadow:inset 0 0 0 3px var(--panel), inset 0 0 0 4px var(--panel-edge);
+  }
+  input[type=color]::-webkit-color-swatch-wrapper{ padding:0; }
+  input[type=color]::-webkit-color-swatch{ border:1px solid rgba(231,234,240,.25); border-radius:0; }
+  input[type=color]::-moz-color-swatch{ border:1px solid rgba(231,234,240,.25); border-radius:0; }
+  input[type=color]:hover{ border-color:var(--blue2); }
+  input.hex{
+    width:100%; min-width:0; height:46px; border-radius:0;
+    background:var(--panel); color:var(--ink); border:1px solid var(--line);
+    box-shadow:inset 0 0 0 3px var(--panel), inset 0 0 0 4px var(--panel-edge);
+    font-family:var(--font-mono); font-size:.95rem; letter-spacing:.04em; padding:0 14px;
+    text-transform:uppercase;
+  }
+  input.hex:hover{ border-color:var(--blue2); }
+  input.hex.bad{ border-color:var(--danger); }
+  input:focus-visible{ outline:1px solid #fff; outline-offset:2px; }
+
+  button.tool{
+    --c:var(--blue2);
+    border:1px solid var(--line); background:
+      linear-gradient(var(--c),var(--c)) top left/8px 1px no-repeat,
+      linear-gradient(var(--c),var(--c)) top left/1px 8px no-repeat,
+      linear-gradient(var(--c),var(--c)) top right/8px 1px no-repeat,
+      linear-gradient(var(--c),var(--c)) top right/1px 8px no-repeat,
+      linear-gradient(var(--c),var(--c)) bottom left/8px 1px no-repeat,
+      linear-gradient(var(--c),var(--c)) bottom left/1px 8px no-repeat,
+      linear-gradient(var(--c),var(--c)) bottom right/8px 1px no-repeat,
+      linear-gradient(var(--c),var(--c)) bottom right/1px 8px no-repeat,
+      var(--panel);
+    box-shadow:inset 0 0 0 3px var(--panel), inset 0 0 0 4px var(--panel-edge);
+    color:var(--ink); font-family:var(--font-ui); font-size:.78rem;
+    letter-spacing:.06em; padding:13px 8px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; gap:8px;
+  }
+  button.tool svg{ width:14px; height:14px; fill:none; stroke:currentColor; stroke-width:1.4; stroke-linecap:square; }
+  button.tool:hover{ --c:#fff; }
+  button.tool:focus-visible{ outline:1px solid #fff; outline-offset:2px; }
+  button.tool.active{ --c:var(--blue); background-color:rgba(63,111,168,.2); color:#fff; }
+  .btn-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+  .btn-grid.two{ grid-template-columns:repeat(2,1fr); }
+  .fields + .btn-grid{ margin-top:12px; }
+
+  button.generate{
+    width:100%; background:var(--blue); border:1px solid var(--blue2); color:#fff;
+    font-family:var(--font-ui); font-size:.8rem; font-weight:500; text-transform:uppercase; letter-spacing:.24em;
+    padding:24px 10px; cursor:pointer;
+    box-shadow:inset 0 0 0 4px var(--blue), inset 0 0 0 5px rgba(231,234,240,.4);
+  }
+  button.generate:hover{ background:#4a7cb8; box-shadow:inset 0 0 0 4px #4a7cb8, inset 0 0 0 5px rgba(231,234,240,.55); }
+  button.generate:focus-visible{ outline:1px solid #fff; outline-offset:2px; }
+  button.plain{
+    width:100%; margin-top:8px; background:transparent; border:1px solid var(--line);
+    color:var(--ink-soft); font-family:var(--font-ui); font-size:.68rem; text-transform:uppercase;
+    letter-spacing:.2em; padding:11px 10px; cursor:pointer;
+  }
+  button.plain:hover{ color:var(--ink); border-color:var(--blue2); }
+  button.plain:focus-visible{ outline:1px solid #fff; outline-offset:2px; }
+  button.plain.on{ color:#fff; border-color:var(--blue); background:rgba(63,111,168,.22); }
+  .status{ font-size:.72rem; color:var(--ink-soft); margin-top:8px; min-height:1.1em; }
+  kbd{ font-family:var(--font-mono); font-size:.66rem; border:1px solid var(--line); padding:1px 5px; color:var(--ink); }
+
+  @media (max-width:760px){
+    header{ padding:18px 20px; }
+    .stage{ border-right:none; border-bottom:1px solid var(--line); padding:18px; flex-basis:100%; }
+    .rail-frame{ min-height:0; }
+    .preview{ margin:30px 22px; }
+    .surface{ padding:20px 18px 22px; }
+    .rung{ grid-template-columns:1fr; gap:2px; }
+    .t32{ font-size:28px; }
+    .side{ padding:24px 20px; flex-basis:100%; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Contrast checker</h1>
+  <p>Check a text and background pair against WCAG 2.2, then test an alternative beside it.</p>
+</header>
+
+<div class="app">
+  <div class="stage">
+    <div class="rail-frame">
+      <div class="rail-d tl"></div><div class="rail-d tr"></div>
+      <div class="rail-d bl"></div><div class="rail-d br"></div>
+      <div class="preview" id="preview"></div>
+    </div>
+  </div>
+
+  <div class="side">
+    <div>
+      <div class="group-title">Contrast ratio</div>
+      <div class="ratios" id="ratios"></div>
+      <div class="delta" id="delta" aria-live="polite"></div>
+      <div class="checks" id="checks"></div>
+    </div>
+
+    <div>
+      <div class="group-title">Original</div>
+      <div class="fields" id="fieldsA"></div>
+      <div class="btn-grid two">
+        <button class="tool" data-act="flip" data-pair="a"></button>
+        <button class="tool" data-act="gen" data-pair="a"></button>
+      </div>
+    </div>
+
+    <div id="groupB" hidden>
+      <div class="group-title">Comparison</div>
+      <div class="fields" id="fieldsB"></div>
+      <div class="btn-grid">
+        <button class="tool" data-act="flip" data-pair="b"></button>
+        <button class="tool" data-act="gen" data-pair="b"></button>
+        <button class="tool" data-act="match" data-pair="b"></button>
+      </div>
+      <div class="hint">Match copies the original so you can adjust one color at a time.</div>
+    </div>
+
+    <div>
+      <div class="group-title">Generate</div>
+      <div class="btn-grid" id="targetGrid" role="group" aria-label="Minimum contrast for new colors">
+        <button class="tool" data-target="1" aria-pressed="false">Any</button>
+        <button class="tool active" data-target="4.5" aria-pressed="true">AA</button>
+        <button class="tool" data-target="7" aria-pressed="false">AAA</button>
+      </div>
+      <div class="hint" id="targetHint"></div>
+      <div style="height:14px"></div>
+      <button class="generate" id="btnGen">Generate colors</button>
+      <button class="plain" id="btnCompare" aria-pressed="false">Compare with new colors</button>
+      <button class="plain" id="btnCopy">Copy as CSS variables</button>
+      <div class="status" id="status" aria-live="polite"></div>
+      <div class="hint"><kbd>Space</kbd> generate, <kbd>F</kbd> flip, <kbd>C</kbd> compare</div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+
+  const ICONS = {
+    flip:'<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 5h11M10 2l3 3-3 3M14 11H3M6 8l-3 3 3 3"/></svg>',
+    gen:'<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 8A5.5 5.5 0 1 1 11.8 4M12 1.5V4.5H9"/></svg>',
+    match:'<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5" y="5" width="8" height="9"/><path d="M3 11V2h7"/></svg>'
+  };
+  const LABELS = { flip:'Flip', gen:'Generate', match:'Match' };
+
+  const SPEC_ICONS =
+    '<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9h-6v-6H9v6H3z"/></svg>' +
+    '<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>' +
+    '<svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4"/></svg>' +
+    '<svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14"/><path d="M3 6l9 7 9-7"/></svg>' +
+    '<svg width="32" height="32" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9.5 17H2.5zM12 10v4M12 17.2v.1"/></svg>' +
+    '<svg width="32" height="32" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l3 3 5-6"/></svg>' +
+    '<svg width="32" height="32" viewBox="0 0 24 24" aria-hidden="true"><path class="solid" d="M12 21s-8-5.2-8-11a4.5 4.5 0 0 1 8-2.8A4.5 4.5 0 0 1 20 10c0 5.8-8 11-8 11z"/></svg>';
+
+  const CHECKS = [
+    { key:'aaN', name:'Normal text, AA', need:4.5, note:'4.5:1' },
+    { key:'aaaN', name:'Normal text, AAA', need:7, note:'7:1' },
+    { key:'aaL', name:'Large text, AA', need:3, note:'3:1, 24px or 18.66px bold' },
+    { key:'aaaL', name:'Large text, AAA', need:4.5, note:'4.5:1' },
+    { key:'ui', name:'Icons and UI, AA', need:3, note:'3:1, WCAG 1.4.11' }
+  ];
+
+  const TARGET_HINTS = {
+    '1':'New colors can land at any ratio. Useful for exploring.',
+    '4.5':'New colors reach at least 4.5:1, enough for body text at AA.',
+    '7':'New colors reach at least 7:1, enough for body text at AAA.'
+  };
+
+  /* ---------- color math ---------- */
+  const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+  const rand = (a, b) => a + Math.random() * (b - a);
+
+  function hslToHex(h, s, l){
+    s /= 100; l /= 100;
+    const k = n => (n + h / 30) % 12;
+    const a = s * Math.min(l, 1 - l);
+    const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+    return '#' + [f(0), f(8), f(4)].map(v => Math.round(v * 255).toString(16).padStart(2, '0')).join('').toUpperCase();
+  }
+  function hexToRgb(hex){
+    const n = parseInt(hex.slice(1), 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+  function normalize(v){
+    let s = String(v).trim().replace(/^#/, '');
+    if(/^[0-9a-f]{3}$/i.test(s)) s = s.split('').map(c => c + c).join('');
+    return /^[0-9a-f]{6}$/i.test(s) ? '#' + s.toUpperCase() : null;
+  }
+  function luminance(hex){
+    return hexToRgb(hex).map(c => {
+      c /= 255;
+      return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    }).reduce((acc, c, i) => acc + c * [0.2126, 0.7152, 0.0722][i], 0);
+  }
+  function ratio(a, b){
+    const l1 = luminance(a), l2 = luminance(b);
+    return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+  }
+  /* WCAG compares the unrounded value; show two decimals, floored so 4.499 never reads as 4.50 */
+  const fmt = r => (Math.floor(r * 100) / 100).toFixed(2);
+
+  function randomPair(target){
+    let best = null;
+    for(let i = 0; i < 600; i++){
+      const dark = Math.random() < .5;
+      const bg = hslToHex(rand(0, 360), rand(8, 85), dark ? rand(4, 38) : rand(62, 97));
+      const fg = hslToHex(rand(0, 360), rand(10, 90), dark ? rand(55, 98) : rand(4, 45));
+      const r = ratio(bg, fg);
+      if(r < 1.4) continue;
+      if(r >= target) return { bg, fg };
+      if(!best || r > best.r) best = { bg, fg, r };
+    }
+    const bg = best ? best.bg : '#FFFFFF';
+    return { bg, fg: ratio(bg, '#000000') >= ratio(bg, '#FFFFFF') ? '#000000' : '#FFFFFF' };
+  }
+
+  /* ---------- state ---------- */
+  const state = {
+    a:{ bg:'#14171F', fg:'#9CB6D6' },
+    b:null,
+    compare:false,
+    target:4.5,
+    fresh:new Set()
+  };
+
+  /* ---------- fields ---------- */
+  function buildFields(pair, el){
+    const name = pair === 'a' ? 'original' : 'comparison';
+    el.innerHTML = ['bg', 'fg'].map(k => {
+      const label = k === 'bg' ? 'Background' : 'Text and icons';
+      const id = pair + '-' + k;
+      return '<div class="field">' +
+        '<label for="' + id + '-hex">' + label + '</label>' +
+        '<div class="field-row">' +
+          '<input type="color" id="' + id + '-pick" aria-label="' + label + ' color picker, ' + name + '">' +
+          '<input type="text" class="hex" id="' + id + '-hex" maxlength="7" spellcheck="false" autocomplete="off" aria-label="' + label + ' hex, ' + name + '">' +
+        '</div></div>';
+    }).join('');
+
+    ['bg', 'fg'].forEach(k => {
+      const pick = $(pair + '-' + k + '-pick'), hex = $(pair + '-' + k + '-hex');
+      pick.addEventListener('input', () => { state[pair][k] = pick.value.toUpperCase(); render(false, pair + '-' + k + '-pick'); });
+      hex.addEventListener('input', () => {
+        const v = normalize(hex.value);
+        hex.classList.toggle('bad', !v && hex.value.trim() !== '');
+        if(v){ state[pair][k] = v; render(false, pair + '-' + k + '-hex'); }
+      });
+      hex.addEventListener('blur', () => { hex.value = state[pair][k]; hex.classList.remove('bad'); });
+      hex.addEventListener('keydown', e => { if(e.key === 'Enter') hex.blur(); });
+    });
+  }
+
+  function syncFields(skip){
+    ['a', 'b'].forEach(p => {
+      if(!state[p]) return;
+      ['bg', 'fg'].forEach(k => {
+        const pick = $(p + '-' + k + '-pick'), hex = $(p + '-' + k + '-hex');
+        if(!pick) return;
+        if(skip !== pick.id) pick.value = state[p][k].toLowerCase();
+        if(skip !== hex.id){ hex.value = state[p][k]; hex.classList.remove('bad'); }
+      });
+    });
+  }
+
+  /* ---------- render ---------- */
+  function verdict(r){
+    if(r >= 7) return { text:'AAA', pass:true };
+    if(r >= 4.5) return { text:'AA', pass:true };
+    if(r >= 3) return { text:'AA large text only', pass:true };
+    return { text:'Fails', pass:false };
+  }
+
+  function specimen(pair, title){
+    const { bg, fg } = state[pair];
+    const r = ratio(bg, fg), v = verdict(r);
+    return '<section class="specimen' + (state.fresh.has(pair) ? ' fresh' : '') + '" aria-label="' + title + ' preview">' +
+      '<div class="spec-meta">' +
+        '<span class="spec-name">' + title + '</span>' +
+        '<span class="spec-pair">' + fg + ' on ' + bg + '</span>' +
+        '<span class="spec-verdict ' + (v.pass ? 'pass' : 'fail') + '">' + fmt(r) + ':1, ' + v.text + '</span>' +
+      '</div>' +
+      '<div class="plate"><div class="surface" style="background:' + bg + ';color:' + fg + ';--sbg:' + bg + ';--sfg:' + fg + '">' +
+        '<div class="ladder">' +
+          rung('32px', 'large', 't32', 'Quiet type, clear signal') +
+          rung('24px', 'large', 't24', 'Large text needs 3:1 at AA') +
+          rung('18.66px', 'bold, large', 't19', 'Bold 14pt counts as large text') +
+          rung('16px', 'normal', 't16', 'Body copy is where most contrast problems show up. Long paragraphs at low contrast tire the eye long before anyone notices why.') +
+          rung('14px', 'normal', 't14', 'Secondary text, table cells and form hints usually sit at this size and often fail first.') +
+          rung('12px', 'normal', 't12', 'Captions, legal notes and timestamps.') +
+        '</div>' +
+        '<div class="kit">' +
+          '<div class="icons">' + SPEC_ICONS + '</div>' +
+          '<div class="ui">' +
+            '<span class="fake-btn fill">Continue</span>' +
+            '<span class="fake-btn">Cancel</span>' +
+            '<span class="fake-input">name@example.com</span>' +
+            '<span class="fake-check"><i><svg viewBox="0 0 12 12"><path d="M2 6.5l2.5 2.5L10 3.5"/></svg></i>Remember me</span>' +
+            '<span class="fake-link">Read the guide</span>' +
+          '</div>' +
+        '</div>' +
+      '</div></div>' +
+    '</section>';
+  }
+  function rung(size, kind, cls, text){
+    return '<div class="rung"><span class="sz">' + size + '<small>' + kind + '</small></span><span class="tx ' + cls + '">' + text + '</span></div>';
+  }
+
+  function render(fresh, skipField){
+    state.fresh = new Set(fresh || []);
+    const two = state.compare && state.b;
+
+    $('preview').innerHTML = specimen('a', 'Original') + (two ? specimen('b', 'Comparison') : '');
+
+    const rA = ratio(state.a.bg, state.a.fg);
+    const rB = two ? ratio(state.b.bg, state.b.fg) : null;
+
+    const box = (label, r) => '<div class="ratio"><span>' + label + '</span><b>' + fmt(r) + '<small>:1</small></b></div>';
+    $('ratios').className = 'ratios' + (two ? ' two' : '');
+    $('ratios').innerHTML = box('Original', rA) + (two ? box('Comparison', rB) : '');
+
+    if(two){
+      const d = rB - rA;
+      $('delta').textContent = Math.abs(d) < 0.005
+        ? 'Both pairs have the same contrast.'
+        : 'Comparison is ' + Math.abs(d).toFixed(2) + ' ' + (d > 0 ? 'higher' : 'lower') + ' than the original.';
+    } else {
+      $('delta').textContent = '';
+    }
+
+    const mark = (r, need) => r >= need ? '<span class="mark pass">Pass</span>' : '<span class="mark fail">Fail</span>';
+    $('checks').className = 'checks' + (two ? ' two' : '');
+    $('checks').innerHTML =
+      (two ? '<div class="check-row check-head"><span>Criterion</span><span>Original</span><span>Compare</span></div>' : '') +
+      CHECKS.map(c =>
+        '<div class="check-row"><span>' + c.name + '<span class="need">' + c.note + '</span></span>' +
+        mark(rA, c.need) + (two ? mark(rB, c.need) : '') + '</div>'
+      ).join('');
+
+    $('groupB').hidden = !two;
+    const cmp = $('btnCompare');
+    cmp.classList.toggle('on', !!two);
+    cmp.setAttribute('aria-pressed', !!two);
+    cmp.textContent = two ? 'Remove comparison' : 'Compare with new colors';
+    $('btnGen').textContent = two ? 'Generate comparison' : 'Generate colors';
+    $('targetHint').textContent = TARGET_HINTS[String(state.target)];
+    syncFields(skipField);
+  }
+
+  /* ---------- actions ---------- */
+  function say(t){ $('status').textContent = t; }
+
+  function flip(p){
+    const s = state[p]; [s.bg, s.fg] = [s.fg, s.bg];
+    render([p]); say((p === 'a' ? 'Original' : 'Comparison') + ' colors flipped.');
+  }
+  function gen(p){
+    state[p] = randomPair(state.target);
+    render([p]); say('New ' + (p === 'a' ? 'original' : 'comparison') + ' colors: ' + state[p].fg + ' on ' + state[p].bg + '.');
+  }
+  function toggleCompare(){
+    state.compare = !state.compare;
+    if(state.compare){
+      if(!state.b){ state.b = randomPair(state.target); buildFields('b', $('fieldsB')); }
+      render(['b']); say('Comparison added below the original.');
+    } else {
+      render(); say('Comparison removed.');
+    }
+  }
+
+  document.querySelectorAll('button[data-act]').forEach(b => {
+    b.innerHTML = ICONS[b.dataset.act] + '<span>' + LABELS[b.dataset.act] + '</span>';
+    b.addEventListener('click', () => {
+      const p = b.dataset.pair, act = b.dataset.act;
+      if(act === 'flip') flip(p);
+      else if(act === 'gen') gen(p);
+      else if(act === 'match'){ state.b = { ...state.a }; render(['b']); say('Comparison now matches the original.'); }
+    });
+  });
+
+  $('targetGrid').addEventListener('click', e => {
+    const b = e.target.closest('button.tool'); if(!b) return;
+    $('targetGrid').querySelectorAll('.tool').forEach(x => {
+      const on = x === b; x.classList.toggle('active', on); x.setAttribute('aria-pressed', on);
+    });
+    state.target = parseFloat(b.dataset.target);
+    $('targetHint').textContent = TARGET_HINTS[b.dataset.target];
+  });
+
+  $('btnGen').addEventListener('click', () => gen(state.compare ? 'b' : 'a'));
+  $('btnCompare').addEventListener('click', toggleCompare);
+
+  async function copyText(t){
+    try { await navigator.clipboard.writeText(t); return true; }
+    catch(_){
+      try {
+        const ta = document.createElement('textarea'); ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select(); const ok = document.execCommand('copy'); ta.remove(); return ok;
+      } catch(__){ return false; }
+    }
+  }
+  $('btnCopy').addEventListener('click', async () => {
+    let css = ':root{\n  --background: ' + state.a.bg + ';\n  --foreground: ' + state.a.fg + ';\n';
+    if(state.compare && state.b) css += '  --background-alt: ' + state.b.bg + ';\n  --foreground-alt: ' + state.b.fg + ';\n';
+    css += '}';
+    const ok = await copyText(css);
+    say(ok ? 'Copied colors as CSS variables.' : 'Copy failed. Copy each hex from the fields instead.');
+  });
+
+  document.addEventListener('keydown', e => {
+    if(e.target.closest('input, textarea, select') || e.metaKey || e.ctrlKey || e.altKey) return;
+    if(e.code === 'Space' && !e.target.closest('button')){ e.preventDefault(); gen(state.compare ? 'b' : 'a'); }
+    else if(e.key === 'f' || e.key === 'F') flip(state.compare ? 'b' : 'a');
+    else if(e.key === 'c' || e.key === 'C') toggleCompare();
+  });
+
+  buildFields('a', $('fieldsA'));
+  render();
+})();
+</script>
+</body>
+</html>
